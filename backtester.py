@@ -30,16 +30,16 @@ st.markdown("""
 - ETF 티커는 QQQ, QLD, TQQQ 중 하나를 선택할 수 있습니다.
 
 ### 지금까지 최고 전략:
-- QLD 매수, 20% 손절, 누적수익률: 431.01%, 최대 MDD: -30.74%, 기대수익률: 10.48%
+- QLD 매수, 20% 손절
 """)
 
 # 사용자 입력 받기
-ticker = st.sidebar.selectbox('ETF 티커 선택', ['QQQ', 'QLD', 'TQQQ'], index=0)
+ticker = st.sidebar.selectbox('ETF 티커 선택', ['QQQ', 'QLD', 'TQQQ'], index=1)
 start_date = st.sidebar.date_input('시작일', pd.to_datetime('2000-01-01'))
 end_date = pd.to_datetime('today')  # 종료일을 오늘 날짜로 설정
 
 # 손절 비율을 사용자로부터 입력 받기 (0.05 단위)
-stop_loss = st.sidebar.number_input('손절 비율 (0과 1 사이, 예: 0.25)', min_value=0.0, max_value=1.0, value=0.25, step=0.05)
+stop_loss = st.sidebar.number_input('손절 비율 (0과 1 사이, 예: 0.20)', min_value=0.0, max_value=1.0, value=0.20, step=0.05)
 
 # 버튼 클릭 시 백테스트 실행
 if st.sidebar.button('백테스트 하기'):
@@ -73,7 +73,7 @@ if st.sidebar.button('백테스트 하기'):
 
                     # 매수 가능 조건 확인
                     if last_buy_date is None or (vix_data.index[i] - last_buy_date).days > hold_period:
-                        buy_date = vix_data.index[i] + pd.Timedelta(days=30)  # VIX 40 하향 돌파 후 30일 뒤 매수
+                        buy_date = vix_data.index[i] + pd.Timedelta(days=30)  # VIX 40 하향 돌파 후 30일 후 매수
                         if buy_date in qqq_data.index:  # 매수 가능한 날짜 확인
                             signals.loc[buy_date] = 1
                             last_buy_price = qqq_data.loc[buy_date, 'Close'].item()
@@ -160,6 +160,9 @@ if st.sidebar.button('백테스트 하기'):
         trade_df['수익률 (%)'] = trade_df['수익률 (%)'].map(lambda x: f"{x:0.2f}")
         trade_df['MDD (%)'] = trade_df['MDD (%)'].map(lambda x: f"{x:0.2f}")
 
+        # index를 1부터 시작하도록 설정
+        trade_df.index = range(1, len(trade_df) + 1)
+
         # 수익률과 MDD 컬럼에 색상 적용
         def colorize(val, mdd_val):
             try:
@@ -181,25 +184,21 @@ if st.sidebar.button('백테스트 하기'):
                 b = 66 - intensity_level * 5  # B 값을 진하게 만들기
 
                 color = f'rgb({r}, {g}, {b})'  # 색상 값 설정
-                text_color = 'white'  # 양수 수익률일 때 텍스트 색상은 흰색
+                # text_color = 'white'  # 양수 수익률일 때 텍스트 색상은 흰색
             else:  # 음수 수익률에 대해서
                 # 5% 단위로 음수 수익률에 대해서 색상 강도 계산
                 intensity_level = min(int(abs(val) // 0.05), 51)  # 음수 수익률의 경우도 5% 단위로 강도 설정
 
-                # 빨간색 #dc143c(220, 20, 60)을 기준으로 진해지는 방식
-                r = 220  # 빨간색은 최대값 220
-                g = max(20 - intensity_level * 5, 0)  # G 값은 감소
-                b = max(60 - intensity_level * 5, 0)  # B 값은 감소
-
-                # MDD에 따라 강도를 조정하여 빨간색 진하기
-                g = max(20 - mdd_intensity * 5, 0)  # MDD가 크면 빨간색이 더 진해짐
-                b = max(60 - mdd_intensity * 5, 0)
+                # 빨간색 #DB4455(219, 68, 85)을 기준으로 진해지는 방식
+                r = 219 - intensity_level * 10 # R 값을 진하게 만들기
+                g = 68 - intensity_level * 10  # G 값을 진하게 만들기
+                b = 85 - intensity_level * 10  # B 값을 진하게 만들기
 
                 color = f'rgb({r}, {g}, {b})'  # 빨간색 강도 증가
 
-                text_color = 'black'  # 음수 수익률일 때 텍스트 색상은 검은색
+                # text_color = 'black'  # 음수 수익률일 때 텍스트 색상은 검은색
 
-            return f'background-color: {color}; color: {text_color}'  # 배경색과 텍스트 색상 설정
+            return f'background-color: {color}; color: white'  # 배경색과 텍스트 색상 설정
 
         # 스타일 적용
         def style_func(val, mdd_val):
@@ -213,8 +212,30 @@ if st.sidebar.button('백테스트 하기'):
 
         # 스타일이 적용된 테이블 출력
         st.subheader('백테스트 결과')
-        st.write(f"최고 수익률: {cumulative_return * 100:0.2f}%")
+        st.write(f"누적 수익률: {cumulative_return * 100:0.2f}%")
         st.write(f"최대 MDD: {lowest_trade_drawdown * 100:0.2f}%")
         st.write(f"기대 수익률: {expected_annual_return * 100:0.2f}%")
-        st.write(f"가장 낮은 MDD 발생 날짜: {lowest_mdd_date}")
+        # 최대 MDD 발생 날짜를 YYYY-MM-DD 형식으로 변환
+        if pd.isna(lowest_mdd_date):
+            formatted_date = "N/A"  # NaT인 경우 'N/A'로 표시
+        else:
+            formatted_date = lowest_mdd_date.strftime('%Y-%m-%d')
+        # Streamlit에 출력
+        st.write(f"최대 MDD 발생 날짜: {formatted_date}")
         st.write(trade_df_styled)
+
+        # 그래프 그리기
+        fig = make_subplots(rows=1, cols=1)
+
+        # portfolio_value를 누적 수익률로 사용
+        fig.add_trace(go.Scatter(x=portfolio_value.index, y=portfolio_value.values, mode='lines', name="순자산"))
+
+        fig.update_layout(
+            title='VIX 전략 백테스트',
+            xaxis_title='날짜',
+            yaxis_title='누적 수익률',
+            template="plotly_dark"
+        )
+
+        # 그래프 출력
+        st.plotly_chart(fig)
